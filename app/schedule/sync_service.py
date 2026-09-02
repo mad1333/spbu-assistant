@@ -256,7 +256,9 @@ async def sync_group_week(
         if change.after is not None:
             lesson = lesson_by_current_id[id(change.after)]
         else:
-            lesson = lesson_by_previous_id[id(change.before)]  # type: ignore[arg-type]
+            if change.before is None:
+                raise ValueError("A timetable change must contain a lesson")
+            lesson = lesson_by_previous_id[id(change.before)]
         session.add(
             DetectedChange(
                 id=uuid.uuid4(),

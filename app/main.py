@@ -268,18 +268,21 @@ async def calendar_feed(token: str, kind: str) -> Response:
     if kind not in VALID_KINDS:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Calendar type was not found")
     user = await _calendar_user(token)
+    group = user.current_group
+    if group is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Student group is not selected")
     today = datetime.now(UTC).date()
     async with async_session_factory() as session:
         lessons = await calendar_lessons(
             session,
-            user.current_group.id,  # type: ignore[union-attr]
+            group.id,
             not_before=today - timedelta(days=30),
             not_after=today + timedelta(days=180),
         )
     lessons = apply_english_subgroup(lessons, user.english_subgroup_key)
     body = build_icalendar(
         kind,
-        user.current_group,  # type: ignore[arg-type]
+        group,
         lessons,
         base_url=str(settings.spbu_base_url),
     )

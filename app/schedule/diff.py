@@ -78,6 +78,13 @@ def _format_time(value: datetime) -> str:
     return value.strftime("%d.%m %H:%M")
 
 
+def _change_start(change: LessonChange) -> datetime:
+    lesson = change.after or change.before
+    if lesson is None:
+        raise ValueError("A timetable change must contain a lesson")
+    return lesson.starts_at
+
+
 def compare_schedules(
     previous: list[NormalizedLesson],
     current: list[NormalizedLesson],
@@ -167,7 +174,7 @@ def compare_schedules(
     return sorted(
         changes,
         key=lambda change: (
-            (change.after or change.before).starts_at,  # type: ignore[union-attr]
+            _change_start(change),
             change.kind.value,
         ),
     )

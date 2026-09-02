@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Any, cast
 
 from app.database.models import ActivityType, ChangeKind, DeliveryMode
 from app.schedule.diff import compare_schedules
@@ -27,7 +28,7 @@ def lesson(**overrides: object) -> NormalizedLesson:
         "source_payload": {},
     }
     defaults.update(overrides)
-    return NormalizedLesson(**defaults)  # type: ignore[arg-type]
+    return NormalizedLesson(**cast(dict[str, Any], defaults))
 
 
 def test_detects_cancellation_without_treating_it_as_removal() -> None:

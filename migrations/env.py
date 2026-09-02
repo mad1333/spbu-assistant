@@ -8,8 +8,10 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import get_settings
-from app.database import models  # noqa: F401
 from app.database.base import Base
+from app.database.models import TelegramUser
+
+_MODELS_LOADED = TelegramUser
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

@@ -122,6 +122,12 @@ def _is_admin(telegram_id: int) -> bool:
     return telegram_id in get_settings().admin_ids
 
 
+def _callback_data(callback: CallbackQuery) -> str:
+    if callback.data is None:
+        raise ValueError("Callback data is missing")
+    return callback.data
+
+
 async def _show_admin(message: Message, *, edit: bool) -> None:
     async with async_session_factory() as session:
         overview = await admin_overview(session)
@@ -252,7 +258,7 @@ async def show_admin_users(callback: CallbackQuery) -> None:
     if not _is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
-    page = max(int(callback.data.split(":", 1)[1]), 0)  # type: ignore[union-attr]
+    page = max(int(_callback_data(callback).split(":", 1)[1]), 0)
     async with async_session_factory() as session:
         users, has_next = await admin_users(session, page)
     await callback.answer()
@@ -285,7 +291,7 @@ async def choose_group(callback: CallbackQuery) -> None:
     if callback.from_user is None or not isinstance(callback.message, Message):
         return
     await callback.answer("Группа сохранена")
-    group_source_id = int(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    group_source_id = int(_callback_data(callback).split(":", 1)[1])
     async with async_session_factory.begin() as session:
         await get_or_create_user(session, callback.from_user.id)
         await set_user_group(session, callback.from_user.id, group_source_id)
@@ -309,7 +315,7 @@ async def show_group_catalog(callback: CallbackQuery) -> None:
 async def show_group_directions(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    token = callback.data.split(":", 1)[1]  # type: ignore[union-attr]
+    token = _callback_data(callback).split(":", 1)[1]
     level = LEVEL_TOKENS.get(token)
     if level is None:
         await callback.answer("Уровень обучения не найден", show_alert=True)
@@ -328,7 +334,7 @@ async def show_group_directions(callback: CallbackQuery) -> None:
 async def show_direction_groups(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    key = callback.data.split(":", 1)[1]  # type: ignore[union-attr]
+    key = _callback_data(callback).split(":", 1)[1]
     async with async_session_factory() as session:
         groups = await list_groups(session)
     selected = tuple(
@@ -371,7 +377,7 @@ async def home(callback: CallbackQuery) -> None:
 async def show_day(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    target = date.fromisoformat(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    target = date.fromisoformat(_callback_data(callback).split(":", 1)[1])
     if target < datetime.now(MOSCOW).date():
         await callback.answer("Прошедшие дни недоступны", show_alert=False)
         return
@@ -384,7 +390,7 @@ async def show_lesson(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
     await callback.answer()
-    lesson_id = uuid.UUID(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    lesson_id = uuid.UUID(_callback_data(callback).split(":", 1)[1])
     async with async_session_factory() as session:
         lesson = await latest_lesson(session, lesson_id)
     if lesson is None:
@@ -401,7 +407,7 @@ async def show_lesson(callback: CallbackQuery) -> None:
 async def show_week(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    target = date.fromisoformat(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    target = date.fromisoformat(_callback_data(callback).split(":", 1)[1])
     monday, _ = week_bounds(target)
     today = datetime.now(MOSCOW).date()
     if monday < week_bounds(today)[0]:
@@ -427,7 +433,7 @@ async def show_week(callback: CallbackQuery) -> None:
 async def show_full_week(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    monday = date.fromisoformat(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    monday = date.fromisoformat(_callback_data(callback).split(":", 1)[1])
     await callback.answer("Обновляю неделю…")
     user = await _context(callback.from_user.id)
     if user.current_group is None:
@@ -449,7 +455,7 @@ async def show_month(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
     await callback.answer()
-    year, month = map(int, callback.data.split(":", 1)[1].split("-"))  # type: ignore[union-attr]
+    year, month = map(int, _callback_data(callback).split(":", 1)[1].split("-"))
     await callback.message.edit_text(
         "🗓 <b>Выберите день</b>",
         reply_markup=month_keyboard(year, month, today=datetime.now(MOSCOW).date()),
@@ -555,7 +561,7 @@ async def show_teacher_choices(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
     await callback.answer("Загружаю преподавателей…")
-    lesson_id = uuid.UUID(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    lesson_id = uuid.UUID(_callback_data(callback).split(":", 1)[1])
     user = await _context(callback.from_user.id)
     if user.current_group is None:
         await _show_groups(callback.message, edit=True)
@@ -600,7 +606,7 @@ async def show_selected_teacher(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
     await callback.answer("Загружаю расписание на семестр…")
-    _, educator_id_text, lesson_id_text = callback.data.split(":", 2)  # type: ignore[union-attr]
+    _, educator_id_text, lesson_id_text = _callback_data(callback).split(":", 2)
     await _show_teacher_semester(
         callback.message,
         callback.from_user.id,
@@ -1010,7 +1016,7 @@ async def show_english_settings(callback: CallbackQuery) -> None:
 async def choose_english_subgroup(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    lesson_id = uuid.UUID(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    lesson_id = uuid.UUID(_callback_data(callback).split(":", 1)[1])
     async with async_session_factory() as session:
         lesson = await latest_lesson(session, lesson_id)
     if lesson is None:
@@ -1045,7 +1051,7 @@ async def show_display_settings(callback: CallbackQuery) -> None:
 async def change_display_mode(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    mode = DisplayMode(callback.data.split(":", 1)[1])  # type: ignore[union-attr]
+    mode = DisplayMode(_callback_data(callback).split(":", 1)[1])
     async with async_session_factory.begin() as session:
         await set_display_mode(session, callback.from_user.id, mode)
     await callback.answer("Вид сохранён")
@@ -1072,7 +1078,7 @@ async def show_digest_settings(callback: CallbackQuery) -> None:
 async def toggle_setting(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    field = callback.data.split(":", 1)[1]  # type: ignore[union-attr]
+    field = _callback_data(callback).split(":", 1)[1]
     async with async_session_factory.begin() as session:
         await toggle_user_setting(session, callback.from_user.id, field)
     await callback.answer("Настройка сохранена")
@@ -1089,7 +1095,7 @@ async def toggle_setting(callback: CallbackQuery) -> None:
 async def change_digest_time(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
-    _, kind, value = callback.data.split(":", 2)  # type: ignore[union-attr]
+    _, kind, value = _callback_data(callback).split(":", 2)
     hour, minute = map(int, value.split(":"))
     async with async_session_factory.begin() as session:
         await set_digest_time(
