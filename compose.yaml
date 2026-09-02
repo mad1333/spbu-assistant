@@ -1,0 +1,108 @@
+name: spbu-assistant
+
+services:
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://spbu:${POSTGRES_PASSWORD}@postgres:5432/spbu_assistant
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+
+  app:
+    build: .
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://spbu:${POSTGRES_PASSWORD}@postgres:5432/spbu_assistant
+      PUBLIC_BASE_URL: https://${APP_DOMAIN}
+    secrets:
+      - telegram_bot_token
+      - telegram_webhook_secret
+      - token_signing_key
+      - mail_credentials_key
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://spbu:${POSTGRES_PASSWORD}@postgres:5432/spbu_assistant
+      PUBLIC_BASE_URL: https://${APP_DOMAIN}
+    secrets:
+      - telegram_bot_token
+      - token_signing_key
+      - mail_credentials_key
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: spbu_assistant
+      POSTGRES_USER: spbu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spbu -d spbu_assistant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_started
+    networks:
+      - backend
+
+secrets:
+  telegram_bot_token:
+    file: ./secrets/telegram_bot_token.txt
+  telegram_webhook_secret:
+    file: ./secrets/telegram_webhook_secret.txt
+  token_signing_key:
+    file: ./secrets/token_signing_key.txt
+  mail_credentials_key:
+    file: ./secrets/mail_credentials_key.txt
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  backend:
+    driver: bridge

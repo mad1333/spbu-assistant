@@ -1,0 +1,40 @@
+services:
+  migrate:
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://spbu:development@postgres:5432/spbu_assistant
+
+  app:
+    build:
+      context: .
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://spbu:development@postgres:5432/spbu_assistant
+      PUBLIC_BASE_URL: http://localhost:8000
+      TOKEN_SIGNING_KEY: development-only-calendar-signing-key-change-me
+      MAIL_CREDENTIALS_KEY: development-only-mail-encryption-key-change-me
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/srv/app/app:ro
+    secrets: !reset []
+
+  worker:
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://spbu:development@postgres:5432/spbu_assistant
+      PUBLIC_BASE_URL: http://localhost:8000
+      TOKEN_SIGNING_KEY: development-only-calendar-signing-key-change-me
+      MAIL_CREDENTIALS_KEY: development-only-mail-encryption-key-change-me
+    volumes:
+      - ./app:/srv/app/app:ro
+    secrets: !reset []
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: development
+    ports:
+      - "5432:5432"
+
+  caddy:
+    profiles: ["production"]

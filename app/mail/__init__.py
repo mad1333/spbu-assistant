@@ -1,0 +1,1 @@
+"""Secure student-mail integration."""

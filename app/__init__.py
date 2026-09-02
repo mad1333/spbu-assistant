@@ -1,0 +1,1 @@
+"""SPbU Assistant application package."""

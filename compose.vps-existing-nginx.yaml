@@ -1,0 +1,39 @@
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  migrate:
+    mem_limit: 192m
+    cpus: 0.75
+    logging: *bounded-logging
+
+  app:
+    ports:
+      - "127.0.0.1:18080:8000"
+    mem_limit: 256m
+    cpus: 0.75
+    logging: *bounded-logging
+
+  worker:
+    mem_limit: 256m
+    cpus: 0.75
+    logging: *bounded-logging
+
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - max_connections=20
+      - -c
+      - work_mem=2MB
+    mem_limit: 160m
+    cpus: 0.50
+    logging: *bounded-logging
+
+  caddy:
+    profiles: ["standalone-caddy"]
