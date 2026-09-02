@@ -47,6 +47,25 @@ def test_admin_users_escape_personal_data() -> None:
     assert "Группа 24.Б10-мм &amp; тест" in text
     assert "почта ✓" in text
     assert "<code>123</code>" in text
+    assert 'href="https://t.me/student"' in text
+
+
+def test_admin_user_without_username_links_by_id() -> None:
+    users = (
+        AdminUser(
+            telegram_id=456,
+            username=None,
+            display_name="Анна",
+            group_name=None,
+            last_active_at=None,
+            interaction_count=1,
+            mail_connected=False,
+        ),
+    )
+
+    text = format_admin_users(users, 0)
+
+    assert 'href="tg://user?id=456"' in text
 
 
 def test_group_usage_is_formatted() -> None:

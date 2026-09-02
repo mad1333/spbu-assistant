@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from html import escape
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -161,7 +162,12 @@ def format_admin_users(users: tuple[AdminUser, ...], page: int) -> str:
         return "\n".join(lines)
     for user in users:
         name = escape(user.display_name or "Без имени")
-        username = f" @{escape(user.username)}" if user.username else ""
+        if user.username:
+            profile_url = f"https://t.me/{quote(user.username)}"
+            username = f' <a href="{profile_url}">@{escape(user.username)}</a>'
+        else:
+            profile_url = f"tg://user?id={user.telegram_id}"
+            username = ""
         group = escape(user.group_name or "группа не выбрана")
         active = (
             user.last_active_at.astimezone(MOSCOW).strftime("%d.%m.%Y %H:%M")
@@ -170,7 +176,7 @@ def format_admin_users(users: tuple[AdminUser, ...], page: int) -> str:
         )
         mail = " · почта ✓" if user.mail_connected else ""
         lines.append(
-            f"\n<b>{name}</b>{username}\n"
+            f'\n<b><a href="{profile_url}">{name}</a></b>{username}\n'
             f"ID: <code>{user.telegram_id}</code>\n"
             f"{group}{mail}\n"
             f"Активность: {active} · действий: {user.interaction_count}"
