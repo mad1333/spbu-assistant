@@ -216,24 +216,13 @@ async def start(message: Message) -> None:
         )
 
 
-@router.message(Command("myid"))
-async def show_my_id(message: Message) -> None:
-    if message.from_user is None:
-        return
-    await message.answer(
-        f"Ваш Telegram ID: <code>{message.from_user.id}</code>",
-        parse_mode=ParseMode.HTML,
-    )
-
-
 @router.message(Command("admin"))
 async def show_admin(message: Message) -> None:
     if message.from_user is None:
         return
     if not _is_admin(message.from_user.id):
         await message.answer(
-            "Админка закрыта. Отправьте <code>/myid</code> и добавьте полученный "
-            "ID в настройку <code>TELEGRAM_ADMIN_IDS</code> на сервере.",
+            "Админка закрыта. Обратитесь к владельцу бота для получения доступа.",
             parse_mode=ParseMode.HTML,
         )
         return

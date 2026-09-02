@@ -89,11 +89,10 @@ Development and pull-request guidelines are available in [CONTRIBUTING.md](CONTR
 
 ## Telegram administration
 
-Set `TELEGRAM_ADMIN_IDS` to a comma-separated list of trusted Telegram IDs. A
-user can obtain their ID with `/myid`; authorized users open the private panel
-with `/admin`. The panel shows usage totals, recent activity, group distribution,
-mail connections, and calendar setup requests without exposing passwords or mail
-contents.
+Set `TELEGRAM_ADMIN_IDS` to a comma-separated list of trusted Telegram IDs.
+Authorized users open the private panel with `/admin`. The panel shows usage
+totals, recent activity, group distribution, mail connections, and calendar setup
+requests without exposing passwords or mail contents.
 
 ## License
 
