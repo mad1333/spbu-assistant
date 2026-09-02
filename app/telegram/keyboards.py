@@ -25,6 +25,60 @@ from app.telegram.types import GroupOption, ScheduleLesson, UserContext
 SHORT_WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
+def admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👥 Пользователи", callback_data="admin_users:0"
+                ),
+                InlineKeyboardButton(
+                    text="📊 По группам", callback_data="admin_groups"
+                ),
+            ],
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_refresh")],
+            [InlineKeyboardButton(text="🏠 К расписанию", callback_data="home")],
+        ]
+    )
+
+
+def admin_users_keyboard(
+    page: int,
+    *,
+    has_next: bool,
+) -> InlineKeyboardMarkup:
+    navigation: list[InlineKeyboardButton] = []
+    if page > 0:
+        navigation.append(
+            InlineKeyboardButton(
+                text="← Новее", callback_data=f"admin_users:{page - 1}"
+            )
+        )
+    if has_next:
+        navigation.append(
+            InlineKeyboardButton(
+                text="Старее →", callback_data=f"admin_users:{page + 1}"
+            )
+        )
+    rows = [navigation] if navigation else []
+    rows.extend(
+        [
+            [InlineKeyboardButton(text="← Админка", callback_data="admin_refresh")],
+            [InlineKeyboardButton(text="🏠 К расписанию", callback_data="home")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="← Админка", callback_data="admin_refresh")],
+            [InlineKeyboardButton(text="🏠 К расписанию", callback_data="home")],
+        ]
+    )
+
+
 def group_catalog_keyboard(groups: tuple[GroupOption, ...]) -> InlineKeyboardMarkup:
     grouped = {
         level: sum(split_direction(group.direction)[0] == level for group in groups)

@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str | None = None
     telegram_webhook_secret: str | None = None
+    telegram_admin_ids: str = ""
     token_signing_key: str | None = None
     mail_credentials_key: str | None = None
     mail_imap_host: str = "imap.mail.ru"
@@ -48,6 +49,14 @@ class Settings(BaseSettings):
         return tuple(
             int(value.strip())
             for value in self.initial_group_ids.split(",")
+            if value.strip()
+        )
+
+    @property
+    def admin_ids(self) -> tuple[int, ...]:
+        return tuple(
+            int(value.strip())
+            for value in self.telegram_admin_ids.split(",")
             if value.strip()
         )
 

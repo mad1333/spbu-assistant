@@ -87,6 +87,14 @@ notifications begin with messages received after setup.
 
 Development and pull-request guidelines are available in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Telegram administration
+
+Set `TELEGRAM_ADMIN_IDS` to a comma-separated list of trusted Telegram IDs. A
+user can obtain their ID with `/myid`; authorized users open the private panel
+with `/admin`. The panel shows usage totals, recent activity, group distribution,
+mail connections, and calendar setup requests without exposing passwords or mail
+contents.
+
 ## License
 
 SPbU Assistant is distributed under the [MIT License](LICENSE).

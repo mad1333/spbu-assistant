@@ -23,6 +23,7 @@ services:
       APP_ENV: production
       DATABASE_URL: postgresql+asyncpg://spbu:${POSTGRES_PASSWORD}@postgres:5432/spbu_assistant
       PUBLIC_BASE_URL: https://${APP_DOMAIN}
+      TELEGRAM_ADMIN_IDS: ${TELEGRAM_ADMIN_IDS:-}
     secrets:
       - telegram_bot_token
       - telegram_webhook_secret

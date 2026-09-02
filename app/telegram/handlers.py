@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -42,7 +42,19 @@ from app.schedule.normalizer import normalize_event, normalize_text
 from app.schedule.on_demand import refresh_week_if_needed, week_bounds
 from app.schedule.spbu_client import SpbuTimetableClient, SpbuTimetableError
 from app.schedule.teacher_directory import TeacherDirectoryClient
+from app.telegram.admin import (
+    admin_group_usage,
+    admin_overview,
+    admin_users,
+    format_admin_overview,
+    format_admin_users,
+    format_group_usage,
+    record_calendar_request,
+)
 from app.telegram.keyboards import (
+    admin_back_keyboard,
+    admin_keyboard,
+    admin_users_keyboard,
     apple_calendar_keyboard,
     calendar_services_keyboard,
     day_keyboard,
@@ -104,6 +116,28 @@ class MailCompose(StatesGroup):
     subject = State()
     body = State()
     confirmation = State()
+
+
+def _is_admin(telegram_id: int) -> bool:
+    return telegram_id in get_settings().admin_ids
+
+
+async def _show_admin(message: Message, *, edit: bool) -> None:
+    async with async_session_factory() as session:
+        overview = await admin_overview(session)
+    text = format_admin_overview(overview)
+    if edit:
+        await message.edit_text(
+            text,
+            reply_markup=admin_keyboard(),
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        await message.answer(
+            text,
+            reply_markup=admin_keyboard(),
+            parse_mode=ParseMode.HTML,
+        )
 
 
 async def _context(telegram_id: int) -> UserContext:
@@ -174,6 +208,76 @@ async def start(message: Message) -> None:
             datetime.now(MOSCOW).date(),
             edit=False,
         )
+
+
+@router.message(Command("myid"))
+async def show_my_id(message: Message) -> None:
+    if message.from_user is None:
+        return
+    await message.answer(
+        f"Ваш Telegram ID: <code>{message.from_user.id}</code>",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@router.message(Command("admin"))
+async def show_admin(message: Message) -> None:
+    if message.from_user is None:
+        return
+    if not _is_admin(message.from_user.id):
+        await message.answer(
+            "Админка закрыта. Отправьте <code>/myid</code> и добавьте полученный "
+            "ID в настройку <code>TELEGRAM_ADMIN_IDS</code> на сервере.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    await _show_admin(message, edit=False)
+
+
+@router.callback_query(F.data == "admin_refresh")
+async def refresh_admin(callback: CallbackQuery) -> None:
+    if not isinstance(callback.message, Message):
+        return
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    await callback.answer("Статистика обновлена")
+    await _show_admin(callback.message, edit=True)
+
+
+@router.callback_query(F.data.startswith("admin_users:"))
+async def show_admin_users(callback: CallbackQuery) -> None:
+    if not isinstance(callback.message, Message):
+        return
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    page = max(int(callback.data.split(":", 1)[1]), 0)  # type: ignore[union-attr]
+    async with async_session_factory() as session:
+        users, has_next = await admin_users(session, page)
+    await callback.answer()
+    await callback.message.edit_text(
+        format_admin_users(users, page),
+        reply_markup=admin_users_keyboard(page, has_next=has_next),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@router.callback_query(F.data == "admin_groups")
+async def show_admin_groups(callback: CallbackQuery) -> None:
+    if not isinstance(callback.message, Message):
+        return
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    async with async_session_factory() as session:
+        groups = await admin_group_usage(session)
+    await callback.answer()
+    await callback.message.edit_text(
+        format_group_usage(groups),
+        reply_markup=admin_back_keyboard(),
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @router.callback_query(F.data.startswith("group:"))
@@ -788,6 +892,8 @@ async def show_apple_calendar(callback: CallbackQuery) -> None:
         await callback.answer("Календарь ещё не настроен на сервере", show_alert=True)
         return
     user = await _context(callback.from_user.id)
+    async with async_session_factory.begin() as session:
+        await record_calendar_request(session, callback.from_user.id, "apple")
     token = issue_calendar_token(
         user.telegram_id,
         user.calendar_generation,
@@ -814,6 +920,8 @@ async def show_google_calendar(callback: CallbackQuery) -> None:
         await callback.answer("Календарь ещё не настроен на сервере", show_alert=True)
         return
     user = await _context(callback.from_user.id)
+    async with async_session_factory.begin() as session:
+        await record_calendar_request(session, callback.from_user.id, "google")
     token = issue_calendar_token(
         user.telegram_id,
         user.calendar_generation,

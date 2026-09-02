@@ -91,6 +91,8 @@ class TelegramUser(Base):
     __tablename__ = "telegram_users"
 
     telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     current_group_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("student_groups.id", ondelete="SET NULL"),
@@ -116,6 +118,16 @@ class TelegramUser(Base):
     last_morning_digest_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_evening_digest_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
+    last_active_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    interaction_count: Mapped[int] = mapped_column(Integer, default=0)
+    apple_calendar_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    google_calendar_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
