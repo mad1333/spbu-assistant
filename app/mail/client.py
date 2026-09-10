@@ -39,7 +39,7 @@ class IncomingMessage:
 
 
 MAX_INCOMING_BYTES = 1_000_000
-MAX_BODY_CHARACTERS = 12_000
+MAX_BODY_CHARACTERS = 900_000
 
 
 class _ReadableHtmlParser(HTMLParser):

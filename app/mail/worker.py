@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.config import get_settings
 from app.database.session import async_session_factory
@@ -60,27 +60,10 @@ def _escape_markdown(value: str) -> str:
     return MARKDOWN_RESERVED.sub(r"\\\1", value)
 
 
-def _fit_markdown_body(prefix: str, body: str, suffix: str) -> str:
-    if len(prefix) + len(_escape_markdown(body)) + len(suffix) <= TELEGRAM_TEXT_LIMIT:
-        return body
-    low = 0
-    high = len(body)
-    while low < high:
-        middle = (low + high + 1) // 2
-        length = len(prefix) + len(_escape_markdown(body[:middle])) + len(suffix)
-        if length <= TELEGRAM_TEXT_LIMIT:
-            low = middle
-        else:
-            high = middle - 1
-    return body[:low].rstrip()
-
-
-def _mail_message(
+def _mail_header(
     sender: str,
     subject: str,
     received_at: datetime | None,
-    body_text: str | None,
-    body_truncated: bool,
 ) -> str:
     sender_text = _escape_markdown(sender[:500])
     subject_text = _escape_markdown(subject[:700])
@@ -88,19 +71,61 @@ def _mail_message(
     if received_at is not None:
         value = received_at.astimezone(MOSCOW).strftime("%d.%m.%Y %H:%M")
         received = f"\n🕒 {_escape_markdown(value)}"
-    prefix = (
+    return (
         "📨 *Новое письмо СПбГУ*\n\n"
         f"*От:* {sender_text}\n"
         f"*Тема:* {subject_text}"
-        f"{received}\n\n"
+        f"{received}"
+    )
+
+
+def _mail_message(
+    sender: str,
+    subject: str,
+    received_at: datetime | None,
+    body_text: str | None,
+) -> str:
+    header = _mail_header(sender, subject, received_at)
+    body = body_text or "Текст письма отсутствует или его не удалось прочитать."
+    return header + "\n\n" + _escape_markdown(body)
+
+
+def _mail_document_text(
+    sender: str,
+    subject: str,
+    received_at: datetime | None,
+    body_text: str | None,
+    body_truncated: bool,
+) -> str:
+    received = (
+        received_at.astimezone(MOSCOW).strftime("%d.%m.%Y %H:%M")
+        if received_at is not None
+        else "не указано"
     )
     body = body_text or "Текст письма отсутствует или его не удалось прочитать."
-    notice = "\n\n_Письмо сокращено — полностью его можно открыть в почте\\._"
-    complete = prefix + _escape_markdown(body)
-    if not body_truncated and len(complete) <= TELEGRAM_TEXT_LIMIT:
-        return complete
-    fitted = _fit_markdown_body(prefix, body, notice)
-    return prefix + _escape_markdown(fitted) + notice
+    parts = [
+        "Новое письмо СПбГУ",
+        "",
+        f"От: {sender}",
+        f"Тема: {subject}",
+        f"Получено: {received}",
+        "",
+        body,
+    ]
+    if body_truncated:
+        parts.extend(
+            (
+                "",
+                "Почтовый сервер передал только часть слишком большого письма.",
+                "Полная версия остаётся доступна в почтовом ящике.",
+            )
+        )
+    return "\n".join(parts)
+
+
+def _mail_filename(subject: str, message_uid: int) -> str:
+    clean = re.sub(r"[^\w .()-]+", "_", subject).strip(" .")[:80]
+    return f"{clean or 'Письмо'}-{message_uid}.txt"
 
 
 async def _deliver_pending(bot: Bot) -> None:
@@ -112,15 +137,43 @@ async def _deliver_pending(bot: Bot) -> None:
             notification.subject,
             notification.received_at,
             notification.body_text,
-            notification.body_truncated,
         )
         try:
-            await bot.send_message(
-                notification.telegram_id,
-                message,
-                reply_markup=_mail_keyboard(),
-                parse_mode=ParseMode.MARKDOWN_V2,
-            )
+            if len(message) <= TELEGRAM_TEXT_LIMIT and not notification.body_truncated:
+                await bot.send_message(
+                    notification.telegram_id,
+                    message,
+                    reply_markup=_mail_keyboard(),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                )
+            else:
+                document_text = _mail_document_text(
+                    notification.sender,
+                    notification.subject,
+                    notification.received_at,
+                    notification.body_text,
+                    notification.body_truncated,
+                )
+                document = BufferedInputFile(
+                    document_text.encode("utf-8"),
+                    filename=_mail_filename(
+                        notification.subject,
+                        notification.message_uid,
+                    ),
+                )
+                caption = _mail_header(
+                    notification.sender,
+                    notification.subject,
+                    notification.received_at,
+                )
+                caption += "\n\n📎 Полный текст приложен одним файлом\\."
+                await bot.send_document(
+                    notification.telegram_id,
+                    document,
+                    caption=caption,
+                    reply_markup=_mail_keyboard(),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                )
         except Exception:
             logger.exception(
                 "Could not deliver queued mail notification id=%s",

@@ -20,9 +20,11 @@ A self-hosted timetable service for SPbU students. The current milestone provide
 Student-mail notifications use a separate, time-limited HTTPS setup link. The service connects to
 VK WorkSpace over IMAP/TLS, converts plain or HTML message bodies to safe readable Telegram text,
 does not download attachments, and never marks messages as read. Message bodies are cleared from the
-database after Telegram delivery. Sending uses SMTP/TLS and a three-step recipient, subject, and body
-confirmation flow. Credentials are encrypted with a dedicated server secret. Disconnecting mail in
-the bot removes the encrypted credential and notification metadata.
+database after Telegram delivery. Short mail is delivered as one Markdown message; long mail is
+delivered as one text-file message instead of being split or shortened. Sending uses SMTP/TLS and a
+three-step recipient, subject, and body confirmation flow. Credentials are encrypted with a dedicated
+server secret. Disconnecting mail in the bot removes the encrypted credential and notification
+metadata.
 
 ## Development
 
