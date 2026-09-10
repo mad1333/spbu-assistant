@@ -89,9 +89,25 @@ def english_subgroup_label(lesson: ScheduleLesson) -> str:
     return f"{lesson.subject} · {teacher}"
 
 
+def english_subgroup_choice_matches(
+    subject: str,
+    teacher_names: tuple[str, ...],
+    weekday: int,
+    selected_key: str,
+    group_source_id: int,
+) -> bool:
+    if english_subgroup_key_parts(subject, teacher_names) != selected_key:
+        return False
+    teacher = normalize_text(teacher_names[0]) if teacher_names else ""
+    if group_source_id == 474999 and "костюшина ж. т" in teacher:
+        return weekday == 2
+    return True
+
+
 def apply_english_subgroup(
     lessons: tuple[ScheduleLesson, ...],
     selected_key: str | None,
+    group_source_id: int,
 ) -> tuple[ScheduleLesson, ...]:
     if selected_key is None:
         return lessons
@@ -101,10 +117,16 @@ def apply_english_subgroup(
     selected = {
         lesson.lesson_id
         for lesson in subgroup_lessons
-        if english_subgroup_key(lesson) == selected_key
+        if english_subgroup_choice_matches(
+            lesson.subject,
+            lesson.teacher_names,
+            lesson.starts_at.weekday(),
+            selected_key,
+            group_source_id,
+        )
     }
     if not selected:
-        return lessons
+        return tuple(lesson for lesson in lessons if not is_english_subgroup(lesson))
     return tuple(
         lesson
         for lesson in lessons

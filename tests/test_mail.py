@@ -12,7 +12,7 @@ from app.mail.client import (
 from app.mail.crypto import decrypt_app_password, encrypt_app_password
 from app.mail.setup import mail_setup_html, mail_setup_success_html
 from app.mail.tokens import issue_mail_setup_token, verify_mail_setup_token
-from app.mail.worker import _mail_keyboard
+from app.mail.worker import TELEGRAM_TEXT_LIMIT, _mail_keyboard, _mail_message
 
 SECRET = "mail-test-secret-that-is-at-least-thirty-two-characters"
 
@@ -26,6 +26,34 @@ def test_mail_notification_has_schedule_return_button() -> None:
         if button.callback_data
     }
     assert "home" in callbacks
+
+
+def test_mail_notification_is_one_safe_markdown_message() -> None:
+    message = _mail_message(
+        "Иванов И. И. <teacher@spbu.ru>",
+        "Лабораторная [важно]",
+        datetime(2026, 9, 10, 9, 30, tzinfo=UTC),
+        "Здравствуйте!\n\nФайл *готов*.",
+        False,
+    )
+
+    assert message.startswith("📨 *Новое письмо СПбГУ*")
+    assert "\\[важно\\]" in message
+    assert "\\*готов\\*\\." in message
+    assert len(message) <= TELEGRAM_TEXT_LIMIT
+
+
+def test_long_mail_is_truncated_inside_one_message() -> None:
+    message = _mail_message(
+        "teacher@spbu.ru",
+        "Большое письмо",
+        None,
+        "[данные]." * 3000,
+        False,
+    )
+
+    assert len(message) <= TELEGRAM_TEXT_LIMIT
+    assert "Письмо сокращено" in message
 
 
 def test_mail_credentials_are_encrypted_and_bound_to_user() -> None:

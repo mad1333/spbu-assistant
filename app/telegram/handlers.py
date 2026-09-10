@@ -190,7 +190,11 @@ async def _show_day(
     await _refresh(user.current_group.source_id, target)
     async with async_session_factory() as session:
         lessons = await lessons_for_day(session, user.current_group.id, target)
-    lessons = apply_english_subgroup(lessons, user.english_subgroup_key)
+    lessons = apply_english_subgroup(
+        lessons,
+        user.english_subgroup_key,
+        user.current_group.source_id,
+    )
     today = datetime.now(MOSCOW).date()
     text = format_day(target, user.current_group, lessons, user, today=today)
     markup = day_keyboard(target, lessons, today=today)
@@ -410,7 +414,11 @@ async def show_week(callback: CallbackQuery) -> None:
     await _refresh(user.current_group.source_id, monday)
     async with async_session_factory() as session:
         lessons = await lessons_for_week(session, user.current_group.id, monday)
-    lessons = apply_english_subgroup(lessons, user.english_subgroup_key)
+    lessons = apply_english_subgroup(
+        lessons,
+        user.english_subgroup_key,
+        user.current_group.source_id,
+    )
     await callback.message.edit_text(
         format_week(monday, user.current_group, lessons),
         reply_markup=week_keyboard(monday, today=today),
@@ -431,7 +439,11 @@ async def show_full_week(callback: CallbackQuery) -> None:
     await _refresh(user.current_group.source_id, monday)
     async with async_session_factory() as session:
         lessons = await lessons_for_week(session, user.current_group.id, monday)
-    lessons = apply_english_subgroup(lessons, user.english_subgroup_key)
+    lessons = apply_english_subgroup(
+        lessons,
+        user.english_subgroup_key,
+        user.current_group.source_id,
+    )
     await callback.message.edit_text(
         format_full_week(monday, user.current_group, lessons),
         reply_markup=week_keyboard(monday, today=datetime.now(MOSCOW).date()),
@@ -472,7 +484,13 @@ async def show_next_lesson(callback: CallbackQuery) -> None:
             lessons.extend(
                 await lessons_for_week(session, user.current_group.id, next_monday)
             )
-    lessons = list(apply_english_subgroup(tuple(lessons), user.english_subgroup_key))
+    lessons = list(
+        apply_english_subgroup(
+            tuple(lessons),
+            user.english_subgroup_key,
+            user.current_group.source_id,
+        )
+    )
     upcoming = [
         item for item in lessons if item.starts_at > now and not item.is_cancelled
     ]

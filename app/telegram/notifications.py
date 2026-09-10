@@ -12,14 +12,19 @@ from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
-from app.database.models import ChangeKind, TelegramDayMessage, TelegramUser
+from app.database.models import (
+    ChangeKind,
+    StudentGroup,
+    TelegramDayMessage,
+    TelegramUser,
+)
 from app.database.session import async_session_factory
 from app.schedule.diff import LessonChange
 from app.schedule.normalizer import normalize_text
 from app.telegram.keyboards import day_keyboard
 from app.telegram.presentation import (
     apply_english_subgroup,
-    english_subgroup_key_parts,
+    english_subgroup_choice_matches,
     format_day,
 )
 from app.telegram.repository import get_existing_user, lessons_for_day
@@ -38,7 +43,11 @@ CHANGE_EMOJI = {
 }
 
 
-def _relevant_to_user(change: LessonChange, selected_english_key: str | None) -> bool:
+def _relevant_to_user(
+    change: LessonChange,
+    selected_english_key: str | None,
+    group_source_id: int,
+) -> bool:
     if selected_english_key is None:
         return True
     lesson = change.after or change.before
@@ -47,9 +56,12 @@ def _relevant_to_user(change: LessonChange, selected_english_key: str | None) ->
     subject = normalize_text(lesson.subject)
     if "английский язык" not in subject or "траектория" not in subject:
         return True
-    return (
-        english_subgroup_key_parts(lesson.subject, lesson.teacher_names)
-        == selected_english_key
+    return english_subgroup_choice_matches(
+        lesson.subject,
+        lesson.teacher_names,
+        lesson.starts_at.weekday(),
+        selected_english_key,
+        group_source_id,
     )
 
 
@@ -61,6 +73,9 @@ async def notify_timetable_changes(
     if bot is None or not changes:
         return
     async with async_session_factory() as session:
+        group_source_id = await session.scalar(
+            select(StudentGroup.source_id).where(StudentGroup.id == group_id)
+        )
         users = tuple(
             await session.scalars(
                 select(TelegramUser).where(TelegramUser.current_group_id == group_id)
@@ -68,7 +83,11 @@ async def notify_timetable_changes(
         )
     for user in users:
         for change in changes:
-            if not _relevant_to_user(change, user.english_subgroup_key):
+            if group_source_id is None or not _relevant_to_user(
+                change,
+                user.english_subgroup_key,
+                group_source_id,
+            ):
                 continue
             lesson = change.after or change.before
             if lesson is None:
@@ -133,7 +152,11 @@ async def refresh_bound_day_messages(
             lessons = await lessons_for_day(
                 session, user.current_group.id, binding.target_date
             )
-        lessons = apply_english_subgroup(lessons, user.english_subgroup_key)
+        lessons = apply_english_subgroup(
+            lessons,
+            user.english_subgroup_key,
+            user.current_group.source_id,
+        )
         local_today = datetime.now(ZoneInfo(user.timezone)).date()
         try:
             await bot.edit_message_text(

@@ -4,6 +4,7 @@ import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs
+from zoneinfo import ZoneInfo
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Update
@@ -29,6 +30,8 @@ from app.mail.crypto import encrypt_app_password
 from app.mail.repository import save_mail_account
 from app.mail.setup import mail_setup_html, mail_setup_success_html
 from app.mail.tokens import MailSetupAccess, verify_mail_setup_token
+from app.schedule.on_demand import refresh_week_if_needed
+from app.schedule.spbu_client import SpbuTimetableError
 from app.telegram.presentation import apply_english_subgroup
 from app.telegram.repository import calendar_lessons, get_existing_user
 from app.telegram.runtime import create_runtime
@@ -37,6 +40,7 @@ from app.telegram.types import UserContext
 settings = get_settings()
 telegram_runtime = create_runtime()
 logger = logging.getLogger(__name__)
+MOSCOW = ZoneInfo("Europe/Moscow")
 STUDENT_MAIL_PATTERN = re.compile(r"^st\d+@student\.spbu\.ru$", re.IGNORECASE)
 MAIL_PAGE_HEADERS = {
     "Cache-Control": "no-store",
@@ -271,7 +275,16 @@ async def calendar_feed(token: str, kind: str) -> Response:
     group = user.current_group
     if group is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Student group is not selected")
-    today = datetime.now(UTC).date()
+    today = datetime.now(MOSCOW).date()
+    for target in (today, today + timedelta(days=7)):
+        try:
+            await refresh_week_if_needed(group.source_id, target)
+        except SpbuTimetableError:
+            logger.warning(
+                "Could not refresh calendar feed group=%s date=%s",
+                group.source_id,
+                target,
+            )
     async with async_session_factory() as session:
         lessons = await calendar_lessons(
             session,
@@ -279,7 +292,11 @@ async def calendar_feed(token: str, kind: str) -> Response:
             not_before=today - timedelta(days=30),
             not_after=today + timedelta(days=180),
         )
-    lessons = apply_english_subgroup(lessons, user.english_subgroup_key)
+    lessons = apply_english_subgroup(
+        lessons,
+        user.english_subgroup_key,
+        group.source_id,
+    )
     body = build_icalendar(
         kind,
         group,
@@ -290,7 +307,8 @@ async def calendar_feed(token: str, kind: str) -> Response:
         body,
         media_type="text/calendar; charset=utf-8",
         headers={
-            "Cache-Control": "private, max-age=60",
+            "Cache-Control": "private, no-cache, no-store, must-revalidate",
+            "Expires": "0",
             "Content-Disposition": f'inline; filename="spbu-{kind}.ics"',
         },
     )

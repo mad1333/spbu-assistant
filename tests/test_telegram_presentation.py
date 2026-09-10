@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.database.models import ActivityType, DeliveryMode
 from app.telegram.presentation import (
@@ -10,11 +10,17 @@ from app.telegram.presentation import (
 from app.telegram.types import ScheduleLesson
 
 
-def lesson(subject: str, teacher: str, *, cancelled: bool = False) -> ScheduleLesson:
+def lesson(
+    subject: str,
+    teacher: str,
+    *,
+    cancelled: bool = False,
+    starts_at: str = "2026-09-09T11:15:00+03:00",
+) -> ScheduleLesson:
     return ScheduleLesson(
         lesson_id=uuid.uuid4(),
-        starts_at=datetime.fromisoformat("2026-09-09T11:15:00+03:00"),
-        ends_at=datetime.fromisoformat("2026-09-09T12:50:00+03:00"),
+        starts_at=datetime.fromisoformat(starts_at),
+        ends_at=datetime.fromisoformat(starts_at) + timedelta(minutes=95),
         subject=subject,
         activity_type=ActivityType.practical,
         delivery_mode=DeliveryMode.offline,
@@ -35,9 +41,25 @@ def test_selected_english_subgroup_hides_parallel_options() -> None:
     filtered = apply_english_subgroup(
         (first, second, common),
         english_subgroup_key(second),
+        474999,
     )
 
     assert filtered == (second, common)
+
+
+def test_kostyushina_for_b15_is_shown_only_on_wednesdays() -> None:
+    subject = "Траектория 3 (В1 – В2). Английский язык"
+    teacher = "Костюшина Ж. Т., старший преподаватель"
+    wednesday = lesson(subject, teacher, starts_at="2026-09-16T11:15:00+03:00")
+    friday = lesson(subject, teacher, starts_at="2026-09-18T11:15:00+03:00")
+
+    filtered = apply_english_subgroup(
+        (wednesday, friday),
+        english_subgroup_key(wednesday),
+        474999,
+    )
+
+    assert filtered == (wednesday,)
 
 
 def test_cancelled_lesson_is_visible_and_struck_out() -> None:

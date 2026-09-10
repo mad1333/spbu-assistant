@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from html import escape
+import re
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 MOSCOW = ZoneInfo("Europe/Moscow")
 MAIL_URL = "https://biz.mail.ru/"
 TELEGRAM_TEXT_LIMIT = 3900
+MARKDOWN_RESERVED = re.compile(r"([_\*\[\]\(\)~`>#+\-=|{}.!\\])")
 
 
 def _mail_keyboard() -> InlineKeyboardMarkup:
@@ -54,62 +56,71 @@ def _mail_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _body_chunks(value: str, limit: int = TELEGRAM_TEXT_LIMIT) -> tuple[str, ...]:
-    paragraphs = value.splitlines()
-    chunks: list[str] = []
-    current = ""
-    for paragraph in paragraphs:
-        line = paragraph + "\n"
-        while len(line) > limit:
-            available = limit - len(current)
-            if available > 0:
-                current += line[:available]
-                line = line[available:]
-            chunks.append(current.rstrip())
-            current = ""
-        if len(current) + len(line) > limit:
-            chunks.append(current.rstrip())
-            current = line
+def _escape_markdown(value: str) -> str:
+    return MARKDOWN_RESERVED.sub(r"\\\1", value)
+
+
+def _fit_markdown_body(prefix: str, body: str, suffix: str) -> str:
+    if len(prefix) + len(_escape_markdown(body)) + len(suffix) <= TELEGRAM_TEXT_LIMIT:
+        return body
+    low = 0
+    high = len(body)
+    while low < high:
+        middle = (low + high + 1) // 2
+        length = len(prefix) + len(_escape_markdown(body[:middle])) + len(suffix)
+        if length <= TELEGRAM_TEXT_LIMIT:
+            low = middle
         else:
-            current += line
-    if current.strip():
-        chunks.append(current.rstrip())
-    return tuple(chunks) or ("Текст письма отсутствует.",)
+            high = middle - 1
+    return body[:low].rstrip()
+
+
+def _mail_message(
+    sender: str,
+    subject: str,
+    received_at: datetime | None,
+    body_text: str | None,
+    body_truncated: bool,
+) -> str:
+    sender_text = _escape_markdown(sender[:500])
+    subject_text = _escape_markdown(subject[:700])
+    received = ""
+    if received_at is not None:
+        value = received_at.astimezone(MOSCOW).strftime("%d.%m.%Y %H:%M")
+        received = f"\n🕒 {_escape_markdown(value)}"
+    prefix = (
+        "📨 *Новое письмо СПбГУ*\n\n"
+        f"*От:* {sender_text}\n"
+        f"*Тема:* {subject_text}"
+        f"{received}\n\n"
+    )
+    body = body_text or "Текст письма отсутствует или его не удалось прочитать."
+    notice = "\n\n_Письмо сокращено — полностью его можно открыть в почте\\._"
+    complete = prefix + _escape_markdown(body)
+    if not body_truncated and len(complete) <= TELEGRAM_TEXT_LIMIT:
+        return complete
+    fitted = _fit_markdown_body(prefix, body, notice)
+    return prefix + _escape_markdown(fitted) + notice
 
 
 async def _deliver_pending(bot: Bot) -> None:
     async with async_session_factory() as session:
         pending = await pending_mail_notifications(session)
     for notification in pending:
-        received = ""
-        if notification.received_at is not None:
-            received = (
-                f"\n🕒 {notification.received_at.astimezone(MOSCOW):%d.%m.%Y %H:%M}"
-            )
-        header = (
-            "📨 <b>Новое письмо СПбГУ</b>\n\n"
-            f"<b>От:</b> {escape(notification.sender)}\n"
-            f"<b>Тема:</b> {escape(notification.subject)}"
-            f"{received}"
+        message = _mail_message(
+            notification.sender,
+            notification.subject,
+            notification.received_at,
+            notification.body_text,
+            notification.body_truncated,
         )
-        body = (
-            notification.body_text
-            or "Текст письма отсутствует или его не удалось прочитать."
-        )
-        if notification.body_truncated:
-            body += "\n\n[Письмо сокращено — полностью его можно открыть в почте.]"
-        chunks = _body_chunks(body)
         try:
             await bot.send_message(
-                notification.telegram_id, header, parse_mode=ParseMode.HTML
+                notification.telegram_id,
+                message,
+                reply_markup=_mail_keyboard(),
+                parse_mode=ParseMode.MARKDOWN_V2,
             )
-            for index, chunk in enumerate(chunks):
-                await bot.send_message(
-                    notification.telegram_id,
-                    escape(chunk),
-                    reply_markup=_mail_keyboard() if index == len(chunks) - 1 else None,
-                    parse_mode=ParseMode.HTML,
-                )
         except Exception:
             logger.exception(
                 "Could not deliver queued mail notification id=%s",

@@ -31,7 +31,11 @@ async def _send_digest(
         if user is None or user.current_group is None:
             return
         lessons = await lessons_for_day(session, user.current_group.id, target)
-    lessons = apply_english_subgroup(lessons, user.english_subgroup_key)
+    lessons = apply_english_subgroup(
+        lessons,
+        user.english_subgroup_key,
+        user.current_group.source_id,
+    )
     text = format_day(target, user.current_group, lessons, user, today=local_today)
     message = await bot.send_message(
         telegram_id,
